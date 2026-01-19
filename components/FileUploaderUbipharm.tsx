@@ -1,293 +1,325 @@
-// components/FileUploaderUbipharm.tsx
 'use client';
-import { useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import ExcelJS from "exceljs";
 import { saveAs } from "file-saver";
 import DataTable from "./DataTable";
-import ChartZone from "./ChartZone";
+
 
 export default function FileUploaderUbipharm() {
+  const [rawRows, setRawRows] = useState<any[]>([]);
   const [ventesDF, setVentesDF] = useState<any[]>([]);
   const [ventesRegion, setVentesRegion] = useState<any[]>([]);
   const [produits, setProduits] = useState<string[]>([]);
   const [exclusions, setExclusions] = useState<string[]>([]);
   const [columnsAll, setColumnsAll] = useState<string[]>([]);
   const [columnsSelected, setColumnsSelected] = useState<string[]>([]);
+  const [dragActive, setDragActive] = useState(false);
+
   const [accordionOpen, setAccordionOpen] = useState({
     produits: false,
     colonnes: false,
   });
 
-  const handleUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (evt) => {
-      const txt = evt.target?.result as string;
-      if (!txt) return;
-
-      const headers = extractHeaders(txt);
-      const { rows, regionAgg } = parseUbipharmTxt(txt, headers);
-
-      setVentesDF(rows);
-      setProduits([...new Set(rows.map((r) => r["Nom Produit"]))]);
-
-      const allCols = rows.length > 0 ? Object.keys(rows[0]) : headers;
-      setColumnsAll(allCols);
-      setColumnsSelected(allCols.slice());
-
-      setVentesRegion(Object.entries(regionAgg).map(([Region, Vente]) => ({ Region, Vente })));
-    };
-    reader.readAsText(file, "utf-8");
-  };
 
   const toggleAccordion = (key: "produits" | "colonnes") => {
-    setAccordionOpen((s) => ({ ...s, [key]: !s[key] }));
+  setAccordionOpen(s => ({ ...s, [key]: !s[key] }));
+};
+
+
+  /* ---------------------------------------
+     🔁 Parsing unique (Upload + Drag&Drop)
+  ----------------------------------------*/
+const handleFile = useCallback((file: File) => {
+  if (!file || !file.name.endsWith(".txt")) return;
+
+  const reader = new FileReader();
+  reader.onload = (evt) => {
+    const txt = evt.target?.result;
+    if (typeof txt !== "string") return;
+
+    const headers = extractHeaders(txt);
+    const { rows, regionAgg } = parseUbipharmTxt(txt, headers);
+
+    setRawRows(rows);
+
+    // ✅ FIX TypeScript (string[] garanti)
+    const produitsUniques: string[] = Array.from(
+      new Set(
+        rows
+          .map(r => r["Nom Produit"])
+          .filter((p): p is string => typeof p === "string" && p.trim() !== "")
+      )
+    );
+    setProduits(produitsUniques);
+
+    const allCols = rows.length > 0 ? Object.keys(rows[0]) : headers;
+    setColumnsAll(allCols);
+    setColumnsSelected(allCols);
+
+    setVentesRegion(
+      Object.entries(regionAgg).map(([Region, Vente]) => ({
+        Region,
+        Vente,
+      }))
+    );
   };
 
-  const handleExcludeProduct = (prod: string) => {
-    const newExclusions = exclusions.includes(prod) ? exclusions.filter((p) => p !== prod) : [...exclusions, prod];
-    setExclusions(newExclusions);
-    const filtered = ventesDF.filter((row) => !newExclusions.includes(row["Nom Produit"]));
+  reader.readAsText(file, "utf-8");
+}, []);
+
+  /* ---------------------------------------
+     📂 Upload classique
+  ----------------------------------------*/
+  const handleUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) handleFile(file);
+  };
+
+  /* ---------------------------------------
+     🧲 Drag & Drop PRO
+  ----------------------------------------*/
+  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragActive(false);
+
+    const file = e.dataTransfer.files?.[0];
+    if (file) handleFile(file);
+  };
+
+  useEffect(() => {
+    const prevent = (e: DragEvent) => {
+      e.preventDefault();
+      e.stopPropagation();
+    };
+    window.addEventListener("dragover", prevent);
+    window.addEventListener("drop", prevent);
+    return () => {
+      window.removeEventListener("dragover", prevent);
+      window.removeEventListener("drop", prevent);
+    };
+  }, []);
+
+  /* ---------------------------------------
+     🔄 Filtrage produits
+  ----------------------------------------*/
+  useEffect(() => {
+    const filtered = rawRows.filter(
+      r => !exclusions.includes(r["Nom Produit"])
+    );
     setVentesDF(filtered);
     recomputeRegionAgg(filtered, columnsSelected);
+  }, [exclusions, rawRows, columnsSelected]);
+
+  const handleExcludeProduct = (prod: string) => {
+    setExclusions(prev =>
+      prev.includes(prod)
+        ? prev.filter(p => p !== prod)
+        : [...prev, prod]
+    );
   };
 
+  /* ---------------------------------------
+     📊 Colonnes
+  ----------------------------------------*/
   const handleToggleColumn = (col: string) => {
-    const newCols = columnsSelected.includes(col) ? columnsSelected.filter((c) => c !== col) : [...columnsSelected, col];
-    setColumnsSelected(newCols);
-    recomputeRegionAgg(ventesDF, newCols);
+    setColumnsSelected(prev =>
+      prev.includes(col)
+        ? prev.filter(c => c !== col)
+        : [...prev, col]
+    );
   };
 
   const recomputeRegionAgg = (rows: any[], salesCols: string[]) => {
     const agg: Record<string, number> = {};
-    rows.forEach((r) => {
-      const region = r["Région"] || r["RÉGION"] || r["Region"] || "Unknown";
-      let sum = 0;
-      salesCols.forEach((c) => {
-        const v = Number(r[c]) || 0;
-        sum += v;
-      });
+    rows.forEach(r => {
+      const region = r["Région"] ?? "Unknown";
+      const sum = salesCols.reduce((acc, c) => acc + (Number(r[c]) || 0), 0);
       agg[region] = (agg[region] || 0) + sum;
     });
-    setVentesRegion(Object.entries(agg).map(([Region, Vente]) => ({ Region, Vente })));
+    setVentesRegion(
+      Object.entries(agg).map(([Region, Vente]) => ({ Region, Vente }))
+    );
   };
 
-  const getFilteredRowsForTable = () => {
-    return ventesDF.map((row) => {
-      const filtered: any = {};
-      columnsSelected.forEach((k) => {
-        filtered[k] = row[k];
-      });
-      return filtered;
-    });
-  };
-
-  // sanitizeSheetName : suppression des caractères interdits sans regex
-  const sanitizeSheetName = (name: string, fallback = "Region") => {
-    if (!name) return fallback;
-    const forbidden = ["[", "]", "*", "/", "\\", "?", ":"];
-    let cleaned = "";
-    for (let i = 0; i < name.length; i++) {
-      const ch = name[i];
-      if (!forbidden.includes(ch)) cleaned += ch;
-    }
-    cleaned = cleaned.trim();
-    if (!cleaned) return fallback;
-    return cleaned.length > 31 ? cleaned.slice(0, 31) : cleaned;
-  };
-
+  /* ---------------------------------------
+     📤 Export Excel
+  ----------------------------------------*/
   const handleExportFiltered = async () => {
-    const rows = getFilteredRowsForTable();
     const wb = new ExcelJS.Workbook();
 
-    if (rows.length > 0) {
-      const wsAll = wb.addWorksheet("Tableau_filtré");
-      wsAll.addRow(Object.keys(rows[0]));
-      rows.forEach((r) => wsAll.addRow(Object.values(r)));
-    }
-
     const rowsByRegion: Record<string, any[]> = {};
-    ventesDF.forEach((r) => {
-      const region = r["Région"] || r["RÉGION"] || r["Region"] || "Unknown";
-      if (!rowsByRegion[region]) rowsByRegion[region] = [];
+    ventesDF.forEach(r => {
+      const region = r["Région"] ?? "Unknown";
+      rowsByRegion[region] ||= [];
       const filtered: any = {};
-      columnsSelected.forEach((k) => (filtered[k] = r[k]));
+      columnsSelected.forEach(c => filtered[c] = r[c]);
       rowsByRegion[region].push(filtered);
     });
 
-    Object.entries(rowsByRegion).forEach(([region, regionRows]) => {
-      const sheetName = sanitizeSheetName(region);
-      const ws = wb.addWorksheet(sheetName);
-      if (regionRows.length > 0) {
-        ws.addRow(Object.keys(regionRows[0]));
-        regionRows.forEach((r) => ws.addRow(Object.values(r)));
+    Object.entries(rowsByRegion).forEach(([region, rows]) => {
+      const ws = wb.addWorksheet(sanitizeSheetName(region));
+      if (rows.length) {
+        ws.addRow(Object.keys(rows[0]));
+        rows.forEach(r => ws.addRow(Object.values(r)));
       }
     });
 
-    const wsSynth = wb.addWorksheet("Synthese_par_region");
+    const wsSynth = wb.addWorksheet("Synthese");
     wsSynth.addRow(["Region", "Vente"]);
-    ventesRegion.forEach((r) => wsSynth.addRow([r.Region, r.Vente]));
+    ventesRegion.forEach(r => wsSynth.addRow([r.Region, r.Vente]));
 
     const buf = await wb.xlsx.writeBuffer();
     saveAs(new Blob([buf]), "ubipharm_par_region.xlsx");
   };
 
+  /* ---------------------------------------
+     🧩 UI
+  ----------------------------------------*/
   return (
     <div className="space-y-6">
-      <input type="file" accept=".txt" onChange={handleUpload} className="mb-4" />
+
+      {/* Zone Drag & Drop */}
+      <div
+        onDragOver={e => { e.preventDefault(); setDragActive(true); }}
+        onDragLeave={() => setDragActive(false)}
+        onDrop={handleDrop}
+        className={`border-2 border-dashed rounded-lg p-8 text-center transition
+          ${dragActive ? "border-blue-600 bg-blue-50" : "border-gray-300"}`}
+      >
+        <p className="font-semibold">Glisser-déposer le fichier Ubipharm (.txt)</p>
+        <p className="text-sm text-gray-500 mt-1">ou utiliser le bouton ci-dessous</p>
+        <input type="file" accept=".txt" onChange={handleUpload} className="mt-4" />
+      </div>
 
       {ventesDF.length > 0 && (
-        <div className="border rounded shadow-sm">
-          <div className="flex flex-col md:flex-row">
-            <button
-              onClick={() => toggleAccordion("produits")}
-              className="w-full md:w-1/2 text-left px-4 py-2 bg-gray-100 hover:bg-gray-200 font-semibold"
-            >
-              🚫 Produits à exclure
-              <span className="float-right">{accordionOpen.produits ? "▲" : "▼"}</span>
-            </button>
-            <button
-              onClick={() => toggleAccordion("colonnes")}
-              className="w-full md:w-1/2 text-left px-4 py-2 bg-gray-100 hover:bg-gray-200 font-semibold"
-            >
-              📊 Colonnes visibles
-              <span className="float-right">{accordionOpen.colonnes ? "▲" : "▼"}</span>
-            </button>
-          </div>
+        
+        <>
+         {/* HEADER ACCORDÉON */}
+    <button
+      onClick={() => toggleAccordion("colonnes")}
+      className="w-full px-4 py-2 bg-gray-100 font-semibold text-left"
+    >
+      📊 Colonnes à exporter
+      <span className="float-right">
+        {accordionOpen.colonnes ? "▲" : "▼"}
+      </span>
+    </button>
 
-          <div className="p-4 grid grid-cols-1 md:grid-cols-2 gap-6">
-            {accordionOpen.produits && (
-              <div>
-                <h4 className="font-semibold mb-2">Liste des produits</h4>
-                <ul className="space-y-2 max-h-48 overflow-y-auto">
-                  {produits.map((p) => (
-                    <li key={p} className="flex items-center justify-between">
-                      <label className="flex items-center space-x-2">
-                        <input
-                          type="checkbox"
-                          checked={exclusions.includes(p)}
-                          onChange={() => handleExcludeProduct(p)}
-                          className="h-4 w-4 text-red-600 border-gray-300 rounded"
-                        />
-                        <span className="text-sm text-gray-800">{p}</span>
-                      </label>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
+    {/* CONTENU ACCORDÉON */}
+    {accordionOpen.colonnes && (
+      <div className="p-4 grid grid-cols-2 md:grid-cols-3 gap-2 max-h-64 overflow-y-auto">
+        {columnsAll.map(col => (
+          <label key={col} className="flex items-center gap-2 text-sm">
+            <input
+              type="checkbox"
+              checked={columnsSelected.includes(col)}
+              onChange={() => handleToggleColumn(col)}
+            />
+            {col}
+          </label>
+        ))}
+      </div>
+    )}
+       
 
-            {accordionOpen.colonnes && (
-              <div>
-                <h4 className="font-semibold mb-2">Sélection des colonnes (toute l'en-tête)</h4>
-                <ul className="space-y-2 max-h-48 overflow-y-auto">
-                  {columnsAll.map((col) => (
-                    <li key={col} className="flex items-center justify-between">
-                      <label className="flex items-center space-x-2">
-                        <input
-                          type="checkbox"
-                          checked={columnsSelected.includes(col)}
-                          onChange={() => handleToggleColumn(col)}
-                          className="h-4 w-4 text-blue-600 border-gray-300 rounded"
-                        />
-                        <span className="text-sm text-gray-800">{col}</span>
-                      </label>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
-
-      {ventesDF.length > 0 && (
-        <div className="flex items-center space-x-4">
-          <button
+          <DataTable data={ventesDF.map(r => {
+            const o:any = {};
+            columnsSelected.forEach(c => o[c] = r[c]);
+            return o;
+          })} 
+          />
+   <button
             onClick={handleExportFiltered}
             className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
           >
-            ⬇️ Télécharger Excel (par onglet région)
+            ⬇️ Télécharger Excel (par région)
           </button>
-          <div className="text-sm text-gray-600">Chaque région est exportée dans son propre onglet</div>
-        </div>
+       
+        </>
       )}
-
-      {ventesDF.length > 0 && <DataTable data={getFilteredRowsForTable()} />}
-      {ventesRegion.length > 0 && <ChartZone data={ventesRegion} />}
     </div>
   );
 }
 
-/* ---------------- Helpers JS (adaptés du parser Python) ---------------- */
+/* ---------------- Helpers ---------------- */
 
 const MONTH_RE = /^\d{2}\/\d{2}$/;
 
 function extractHeaders(txt: string): string[] {
-  if (!txt) return ["MOIS", "M-1", "M-2", "M-3", "M-4", "M-5", "M-6"];
   const lines = txt.split(/\r?\n/);
   for (const line of lines) {
     if (line.includes("Stocks / CR")) {
-      let tokens = line.trim().split(/\s+/);
-      let salesHeaders = tokens.slice(3).filter((h) => h !== "/");
-      if (salesHeaders.length !== 7) {
-        const month = salesHeaders.find((h) => MONTH_RE.test(h));
-        salesHeaders = month ? [month, "M-1", "M-2", "M-3", "M-4", "M-5", "M-6"] : ["MOIS", "M-1", "M-2", "M-3", "M-4", "M-5", "M-6"];
-      }
-      return salesHeaders.map((h) => h.trim());
+      const tokens = line.trim().split(/\s+/).slice(3).filter(h => h !== "/");
+      if (tokens.length === 7) return tokens;
+      const m = tokens.find(t => MONTH_RE.test(t));
+      return m ? [m,"M-1","M-2","M-3","M-4","M-5","M-6"] :
+        ["MOIS","M-1","M-2","M-3","M-4","M-5","M-6"];
     }
   }
-  return ["MOIS", "M-1", "M-2", "M-3", "M-4", "M-5", "M-6"];
+  return ["MOIS","M-1","M-2","M-3","M-4","M-5","M-6"];
 }
 
-function parseUbipharmTxt(txt: string, headers: string[]) {
+function sanitizeSheetName(name: string) {
+  return name.replace(/[\\/*?:[\]]/g, "").slice(0, 31) || "Region";
+}
+
+function parseUbipharmTxt(
+  txt: string,
+  headers: string[]
+): {
+  rows: Record<string, any>[];
+  regionAgg: Record<string, number>;
+} {
   const lines = txt.split(/\r?\n/);
-  let region: string | null = null;
-  const rows: Array<Record<string, any>> = [];
+
+  let currentRegion: string | null = null;
+  const rows: Record<string, any>[] = [];
   const regionAgg: Record<string, number> = {};
 
   for (const line of lines) {
-    const regionMatch = line.match(/Pays.*R.gion\s+\d+\/\w+\s+(.*)/);
+    // 🔹 Détection région
+    const regionMatch = line.match(/Pays.*R.gion\s+\d+\/\w+\s+(.*)/i);
     if (regionMatch) {
-      region = regionMatch[1].trim();
+      currentRegion = regionMatch[1].trim();
       continue;
     }
 
+    // 🔹 Ligne produit
     const productMatch = line.match(
-      /\s*([A-Z0-9\-]+)\s+(.+?)\s+(\d+)?\s*\/\s*(\d+)\s+(\d*)\s+(\d*)\s+(\d*)\s+(\d*)\s+(\d*)\s+(\d*)\s+(\d*)/
+      /^\s*([A-Z0-9\-]+)\s+(.+?)\s+(\d+)?\s*\/\s*(\d+)\s+(\d*)\s+(\d*)\s+(\d*)\s+(\d*)\s+(\d*)\s+(\d*)\s+(\d*)/
     );
-    if (productMatch) {
-      // si region n'est pas défini, on ignore la ligne (ou on peut fallback)
-      const regionKey = region ?? "Unknown";
 
-      const code = (productMatch[1] || "").trim();
-      const name = (productMatch[2] || "").trim();
-      const stock = productMatch[3] ? parseInt(productMatch[3], 10) : null;
-      const cr = productMatch[4] ? parseInt(productMatch[4], 10) : 0;
+    if (!productMatch || !currentRegion) continue;
 
-      const sales: number[] = [];
-      for (let i = 5; i <= 11; i++) {
-        const raw = productMatch[i];
-        const v = raw && raw.trim() !== "" ? parseInt(raw, 10) : 0;
-        sales.push(Number.isNaN(v) ? 0 : v);
-      }
+    const code = productMatch[1].trim();
+    const name = productMatch[2].trim();
+    const stock = productMatch[3] ? Number(productMatch[3]) : null;
+    const cr = Number(productMatch[4] || 0);
 
-      if (headers.length === 7 && sales.length === 7) {
-        const row: Record<string, any> = {
-          Région: regionKey,
-          "Code Produit": code,
-          "Nom Produit": name,
-          Stock: stock,
-          CR: cr,
-        };
-        headers.forEach((h, i) => {
-          row[h] = sales[i];
-          regionAgg[regionKey] = (regionAgg[regionKey] || 0) + sales[i];
-        });
-        rows.push(row);
-      }
+    const ventes: number[] = [];
+    for (let i = 5; i <= 11; i++) {
+      const v = Number(productMatch[i] || 0);
+      ventes.push(Number.isNaN(v) ? 0 : v);
     }
+
+    if (headers.length !== ventes.length) continue;
+
+    const row: Record<string, any> = {
+      Région: currentRegion,
+      "Code Produit": code,
+      "Nom Produit": name,
+      Stock: stock,
+      CR: cr,
+    };
+
+    headers.forEach((h, i) => {
+      row[h] = ventes[i];
+      const region = currentRegion!;
+      regionAgg[region] = (regionAgg[region] || 0) + ventes[i];
+    });
+
+    rows.push(row);
   }
 
   return { rows, regionAgg };
