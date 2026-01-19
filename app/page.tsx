@@ -5,7 +5,7 @@ export default function Home() {
   return (
    <div className="min-h-screen flex flex-col md:flex-row">
   {/* Sidebar cachée sur mobile */}
-  <Sidebar className="hidden md:block" />
+  <Sidebar />
 
   <main className="flex-1 p-4 md:p-10 bg-gray-50 text-gray-800 overflow-auto">
     <h1 className="text-2xl md:text-3xl font-bold mb-2">📊 MABOU BI</h1>
