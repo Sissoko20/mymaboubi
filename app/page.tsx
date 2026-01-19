@@ -31,6 +31,16 @@ export default function Home() {
             
           </div>
         </Link>
+
+
+   <Link href="/analyse" className="block max-w-sm mx-auto">
+          <div className="bg-white shadow p-6 rounded-lg hover:bg-blue-50 transition">
+            <h3 className="text-lg font-bold mb-2">💰 Analysez vos données x</h3>
+            <p className="text-gray-600 mb-6">Analyse des ventes Laborex.</p>
+            
+          </div>
+        </Link>
+
       </div>
     </section>
   </main>

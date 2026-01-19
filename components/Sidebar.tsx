@@ -7,8 +7,10 @@ import { useState } from "react";
 
 const navItems = [
   { label: "🏠 Tableau de bord", href: "/" },
-  { label: "📊 Extraction Ubipharm", href: "/ubipharm" },
+  { label: "📦 Extraction Ubipharm", href: "/ubipharm" },
   { label: "🧾 Extraction Laborex", href: "/laborex" },
+  { label: "📊 Analyse ECLA", href: "/analyse" },
+ 
 ];
 
 export default function Sidebar() {
