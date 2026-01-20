@@ -28,7 +28,7 @@ export default function Analyse() {
     <div className="flex min-h-screen bg-gray-100">
       <Sidebar />
       <main className="flex-1 p-8 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <h1 className="text-3xl font-bold mb-6 text-gray-800">Dashboard Ventes par Zone</h1>
+        <h1 className="text-3xl font-bold mb-6 text-gray-800">Vue d'ensemble </h1>
         <Dropzone onFile={handleFileUpload} />
 
         {Object.keys(zones).length > 0 && (

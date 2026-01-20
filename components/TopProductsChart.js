@@ -26,9 +26,13 @@ export default function TopProductsChart({ products }) {
         },
       ]}
       layout={{
-        title: "Top 10 Produits (Unités)",
+        title: {
+          text: "Top 10 Produits (Unités)",
+          font: { size: 20, color: "#333" },
+        },
+        
         xaxis: { title: "Produits" },
-        yaxis: { title: "Unités vendues" },
+        yaxis: { title: "Unités Vendues" },
       }}
       style={{ width: "100%", height: "500px" }}
       config={{ responsive: true }}
