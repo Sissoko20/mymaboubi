@@ -1,15 +1,15 @@
 'use client';
 import { useState } from "react";
+import dynamic from "next/dynamic";
 import { parseExcel } from "../../utils/parseExcel";
 import { aggregateByWholesaler, topProducts } from "../../utils/aggregateData";
-import Chart from "../../components/Chart";
 import Dropzone from "../../components/Dropzone";
-import WholesalerChart from "../../components/WholesalerChart";
-import TopProductsChart from "../../components/TopProductsChart";
 import Sidebar from "../../components/Sidebar";
 
-
-
+// Import dynamique des composants Plotly/D3
+const Chart = dynamic(() => import("../../components/Chart"), { ssr: false });
+const WholesalerChart = dynamic(() => import("../../components/WholesalerChart"), { ssr: false });
+const TopProductsChart = dynamic(() => import("../../components/TopProductsChart"), { ssr: false });
 
 export default function Analyse() {
   const [zones, setZones] = useState({});
