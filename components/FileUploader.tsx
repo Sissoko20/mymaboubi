@@ -5,7 +5,7 @@ import * as XLSX from "xlsx";
 import ExcelJS from "exceljs";
 import { saveAs } from "file-saver";
 import DataTable from "./DataTable";
-import ChartZone from "./ChartZone";
+
 
 export default function FileUploader() {
   const [ventesDF, setVentesDF] = useState<any[]>([]);
@@ -210,7 +210,7 @@ const handleExport = async () => {
       )}
 
       {ventesDF.length > 0 && <DataTable data={ventesDF} />}
-      {ventesZone.length > 0 && <ChartZone data={ventesZone} />}
+     
 
       {ventesDF.length > 0 && (
         <button
