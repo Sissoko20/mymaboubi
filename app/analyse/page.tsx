@@ -25,10 +25,12 @@ import {
   Building2,
   FileSpreadsheet
 } from "lucide-react";
+import Sidebar from "@/components/Sidebar";
 
 export default function Home() {
   const [salesData, setSalesData] = useState<SalesEntry[]>([]);
   const [fileName, setFileName] = useState<string | null>(null);
+
 
   const handleDataLoaded = useCallback((data: SalesEntry[], name: string) => {
     setSalesData(data);
@@ -44,31 +46,7 @@ export default function Home() {
   return (
     <div className="min-h-screen bg-background">
       {/* Header */}
-      <header className="sticky top-0 z-50 bg-card/95 backdrop-blur-sm border-b border-border shadow-sm">
-        <div className="container mx-auto px-4 py-4">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-              <div className="p-2 gradient-primary rounded-lg">
-                <BarChart3 className="h-5 w-5 text-primary-foreground" />
-              </div>
-              <div>
-                <h1 className="font-display font-bold text-xl text-foreground">
-                  Pharma Analytics Mali
-                </h1>
-                <p className="text-xs text-muted-foreground">
-                  Tableau de bord des ventes pharmaceutiques
-                </p>
-              </div>
-            </div>
-            {fileName && (
-              <div className="flex items-center gap-2 bg-secondary px-3 py-1.5 rounded-lg">
-                <FileSpreadsheet className="h-4 w-4 text-muted-foreground" />
-                <span className="text-sm font-medium text-foreground">{fileName}</span>
-              </div>
-            )}
-          </div>
-        </div>
-      </header>
+  <Sidebar />
 
       <main className="container mx-auto px-4 py-6 space-y-6">
         {/* File Upload Section */}
