@@ -1,57 +1,48 @@
 'use client';
 import Plot from "react-plotly.js";
 
-export default function Chart({ data, zone }) {
-  const products = data.map((d) => d.product);
-  const values = data.map((d) => d.nrv);
-  const units = data.map((d) => d.units);
+export default function ChartMacro({ data }) {
+  // si data est un objet, on le transforme en tableau
+  const arr = Array.isArray(data) ? data : Object.values(data || {});
+
+  const zones = arr.map((d) => d.zone);
+  const totalSales = arr.map((d) => d.totalSales || 0);
+  const totalUnits = arr.map((d) => d.totalUnits || 0);
 
   return (
     <div className="bg-white shadow rounded-lg p-4">
       <h2 className="text-xl font-semibold mb-4 text-gray-800">
-        Analyse des ventes par produits – Zone : {zone}
+        Vue macro – Ventes totales et unités par zone
       </h2>
       <Plot
         data={[
           {
             type: "bar",
-            x: products,
-            y: values,
-            name: "Valeur (NRV/CIF en FCFA)",
+            x: zones,
+            y: totalSales,
+            text: totalSales.map((v) => Number(v).toFixed(2)),
+            textposition: "outside",
+            name: "Vente Totale (FCFA)",
             marker: { color: "rgba(55,128,191,0.7)" },
           },
           {
             type: "scatter",
-            x: products,
-            y: units,
-            name: "Unités vendues (boîtes)",
+            x: zones,
+            y: totalUnits,
+            text: totalUnits.map((u) => u.toString()),
+            textposition: "top center",
+            name: "Unités vendues",
             yaxis: "y2",
-            mode: "lines+markers",
+            mode: "lines+markers+text",
             marker: { color: "rgba(255,99,71,0.7)" },
           },
         ]}
         layout={{
-          title: {
-            text: `Analyse des ventes par produits - Zone ${zone}`,
-            font: { size: 20, color: "#333" },
-          },
-          autosize: true,
-          margin: { t: 60, r: 60, b: 120, l: 80 },
-          xaxis: {
-            title: "Produits",
-            tickangle: -45, // rotation des étiquettes pour lisibilité
-          },
-          yaxis: {
-            title: "Valeur (NRV/CIF en FCFA)",
-          },
-          yaxis2: {
-            title: "Unités vendues (boîtes)",
-            overlaying: "y",
-            side: "right",
-          },
-          legend: { orientation: "h", x: 0.3, y: -0.2 },
+          title: "Vue macro – Ventes totales et unités par zone",
+          xaxis: { title: "Zones", tickangle: -45 },
+          yaxis: { title: "Vente Totale (FCFA)" },
+          yaxis2: { title: "Unités vendues", overlaying: "y", side: "right" },
         }}
-        useResizeHandler
         style={{ width: "100%", height: "600px" }}
         config={{ responsive: true }}
       />

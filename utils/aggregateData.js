@@ -2,7 +2,7 @@ export const aggregateByWholesaler = (zones) => {
   const result = [];
 
   Object.keys(zones).forEach((zone) => {
-    const data = zones[zone];
+    const data = zones[zone].products || []; // tableau de produits
     let laborex = 0, ubipharm = 0, camed = 0;
 
     data.forEach((row) => {
@@ -23,15 +23,18 @@ export const aggregateByWholesaler = (zones) => {
   return result;
 };
 
+
 export const topProducts = (zones) => {
   const productsMap = {};
 
-  Object.values(zones).forEach((data) => {
+  Object.values(zones).forEach((zoneData) => {
+    const data = zoneData.products || [];
     data.forEach((row) => {
       if (!productsMap[row.product]) {
         productsMap[row.product] = { units: 0, nrv: row.nrv || 0 };
       }
-      productsMap[row.product].units += Number(row.units || 0);
+      productsMap[row.product].units += Number(row.cumulPharmacies || 0); 
+      // ou row.units si tu veux les unités brutes
     });
   });
 

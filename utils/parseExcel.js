@@ -10,21 +10,56 @@ export const parseExcel = async (file) => {
     const sheet = workbook.Sheets[sheetName];
     const jsonData = XLSX.utils.sheet_to_json(sheet, { header: 1 });
 
-    // On saute les lignes vides ou décoratives
-    const rows = jsonData.filter(
-      (row) => row && row.length > 0 && typeof row[0] === "string"
-    );
+    // On saute les lignes vides
+    const rows = jsonData.filter((row) => row && row.length > 0);
 
-    // Exemple : structure typique
-    // [Produit, NRV, Units, Laborex, Ubipharm, CAMED]
-    zones[sheetName] = rows.map((row) => ({
-      product: row[0] || "",
-      nrv: Number(row[1]) || 0,
-      units: Number(row[2]) || 0,
-      laborex: Number(row[3]) || 0,
-      ubipharm: Number(row[4]) || 0,
-      camed: Number(row[5]) || 0,
-    }));
+    // Fonction de nettoyage des nombres
+    const safeNumber = (val) => {
+      if (typeof val === "string") {
+        return Number(val.replace(",", ".").trim()) || 0;
+      }
+      return Number(val) || 0;
+    };
+
+    const zoneTotals = {};
+
+    rows.forEach((row) => {
+      const product = row[0] ? String(row[0]).trim() : "";
+      const nrv = safeNumber(row[1]);
+      const laborex = safeNumber(row[2]);
+      const ubipharm = safeNumber(row[3]);
+      const camed = safeNumber(row[4]);
+
+      // On ignore les lignes décoratives
+      if (!product || product.toLowerCase().includes("total")) return;
+
+      const cumulPharmacies = laborex + ubipharm + camed;
+      const totalSales = nrv * cumulPharmacies;
+
+      if (!zoneTotals[sheetName]) {
+        zoneTotals[sheetName] = {
+          zone: sheetName,
+          products: [],
+          totalSales: 0,
+          totalUnits: 0,
+        };
+      }
+
+      zoneTotals[sheetName].products.push({
+        product,
+        nrv,
+        laborex,
+        ubipharm,
+        camed,
+        cumulPharmacies,
+        totalSales,
+      });
+
+      zoneTotals[sheetName].totalSales += totalSales;
+      zoneTotals[sheetName].totalUnits += cumulPharmacies;
+    });
+
+    zones[sheetName] = zoneTotals[sheetName];
   });
 
   return zones;
