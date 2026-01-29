@@ -1,9 +1,20 @@
-'use client';
-import { useCallback, useEffect, useState } from "react";
+"use client";
+
+import { useCallback, useEffect, useState, useMemo } from "react";
 import ExcelJS from "exceljs";
 import { saveAs } from "file-saver";
+import { 
+  ChevronDown, 
+  ChevronUp, 
+  Download, 
+  FileText, 
+  Layers, 
+  Table as TableIcon, 
+  Trash2,
+  UploadCloud 
+} from "lucide-react";
+import Sidebar from "@/components/Sidebar"; // Vérifiez le chemin de votre Sidebar
 import DataTable from "./DataTable";
-
 
 export default function FileUploaderUbipharm() {
   const [rawRows, setRawRows] = useState<any[]>([]);
@@ -14,141 +25,83 @@ export default function FileUploaderUbipharm() {
   const [columnsAll, setColumnsAll] = useState<string[]>([]);
   const [columnsSelected, setColumnsSelected] = useState<string[]>([]);
   const [dragActive, setDragActive] = useState(false);
+  const [fileName, setFileName] = useState<string | null>(null);
 
   const [accordionOpen, setAccordionOpen] = useState({
     produits: false,
     colonnes: false,
   });
 
-
-  const toggleAccordion = (key: "produits" | "colonnes") => {
-  setAccordionOpen(s => ({ ...s, [key]: !s[key] }));
-};
-
-
-  /* ---------------------------------------
-     🔁 Parsing unique (Upload + Drag&Drop)
-  ----------------------------------------*/
-const handleFile = useCallback((file: File) => {
-  if (!file || !file.name.endsWith(".txt")) return;
-
-  const reader = new FileReader();
-  reader.onload = (evt) => {
-    const txt = evt.target?.result;
-    if (typeof txt !== "string") return;
-
-    const headers = extractHeaders(txt);
-    const { rows, regionAgg } = parseUbipharmTxt(txt, headers);
-
-    setRawRows(rows);
-
-    // ✅ FIX TypeScript (string[] garanti)
-    const produitsUniques: string[] = Array.from(
-      new Set(
-        rows
-          .map(r => r["Nom Produit"])
-          .filter((p): p is string => typeof p === "string" && p.trim() !== "")
-      )
-    );
-    setProduits(produitsUniques);
-
-    const allCols = rows.length > 0 ? Object.keys(rows[0]) : headers;
-    setColumnsAll(allCols);
-    setColumnsSelected(allCols);
-
-    setVentesRegion(
-      Object.entries(regionAgg).map(([Region, Vente]) => ({
-        Region,
-        Vente,
-      }))
-    );
+  const toggleAccordion = (key: keyof typeof accordionOpen) => {
+    setAccordionOpen(s => ({ ...s, [key]: !s[key] }));
   };
 
-  reader.readAsText(file, "utf-8");
-}, []);
-
   /* ---------------------------------------
-     📂 Upload classique
+     🔁 Parsing & Handling
   ----------------------------------------*/
+  const handleFile = useCallback((file: File) => {
+    if (!file || !file.name.endsWith(".txt")) return;
+    setFileName(file.name);
+
+    const reader = new FileReader();
+    reader.onload = (evt) => {
+      const txt = evt.target?.result;
+      if (typeof txt !== "string") return;
+
+      const headers = extractHeaders(txt);
+      const { rows, regionAgg } = parseUbipharmTxt(txt, headers);
+
+      setRawRows(rows);
+
+      const produitsUniques: string[] = Array.from(
+        new Set(rows.map(r => r["Nom Produit"]).filter((p): p is string => !!p))
+      ).sort();
+      setProduits(produitsUniques);
+
+      const allCols = rows.length > 0 ? Object.keys(rows[0]) : headers;
+      setColumnsAll(allCols);
+      setColumnsSelected(allCols);
+
+      setVentesRegion(
+        Object.entries(regionAgg).map(([Region, Vente]) => ({ Region, Vente }))
+      );
+    };
+    reader.readAsText(file, "utf-8");
+  }, []);
+
   const handleUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) handleFile(file);
   };
 
   /* ---------------------------------------
-     🧲 Drag & Drop PRO
-  ----------------------------------------*/
-  const handleDrop = (e: React.DragEvent<HTMLDivElement>) => {
-    e.preventDefault();
-    e.stopPropagation();
-    setDragActive(false);
-
-    const file = e.dataTransfer.files?.[0];
-    if (file) handleFile(file);
-  };
-
-  useEffect(() => {
-    const prevent = (e: DragEvent) => {
-      e.preventDefault();
-      e.stopPropagation();
-    };
-    window.addEventListener("dragover", prevent);
-    window.addEventListener("drop", prevent);
-    return () => {
-      window.removeEventListener("dragover", prevent);
-      window.removeEventListener("drop", prevent);
-    };
-  }, []);
-
-  /* ---------------------------------------
-     🔄 Filtrage produits
+     🔄 Filtrage & Re-calcul
   ----------------------------------------*/
   useEffect(() => {
-    const filtered = rawRows.filter(
-      r => !exclusions.includes(r["Nom Produit"])
-    );
+    const filtered = rawRows.filter(r => !exclusions.includes(r["Nom Produit"]));
     setVentesDF(filtered);
-    recomputeRegionAgg(filtered, columnsSelected);
-  }, [exclusions, rawRows, columnsSelected]);
-
-  const handleExcludeProduct = (prod: string) => {
-    setExclusions(prev =>
-      prev.includes(prod)
-        ? prev.filter(p => p !== prod)
-        : [...prev, prod]
-    );
-  };
-
-  /* ---------------------------------------
-     📊 Colonnes
-  ----------------------------------------*/
-  const handleToggleColumn = (col: string) => {
-    setColumnsSelected(prev =>
-      prev.includes(col)
-        ? prev.filter(c => c !== col)
-        : [...prev, col]
-    );
-  };
-
-  const recomputeRegionAgg = (rows: any[], salesCols: string[]) => {
+    
+    // Re-calcul de la synthèse région basée sur le filtrage
     const agg: Record<string, number> = {};
-    rows.forEach(r => {
+    filtered.forEach(r => {
       const region = r["Région"] ?? "Unknown";
-      const sum = salesCols.reduce((acc, c) => acc + (Number(r[c]) || 0), 0);
+      // On somme les colonnes qui sont des mois (headers dynamiques)
+      const sum = columnsSelected.reduce((acc, c) => {
+          const val = Number(r[c]);
+          return !isNaN(val) ? acc + val : acc;
+      }, 0);
       agg[region] = (agg[region] || 0) + sum;
     });
-    setVentesRegion(
-      Object.entries(agg).map(([Region, Vente]) => ({ Region, Vente }))
-    );
-  };
+    setVentesRegion(Object.entries(agg).map(([Region, Vente]) => ({ Region, Vente })));
+  }, [exclusions, rawRows, columnsSelected]);
 
   /* ---------------------------------------
-     📤 Export Excel
+     📤 Export Excel Pro
   ----------------------------------------*/
   const handleExportFiltered = async () => {
     const wb = new ExcelJS.Workbook();
-
     const rowsByRegion: Record<string, any[]> = {};
+
     ventesDF.forEach(r => {
       const region = r["Région"] ?? "Unknown";
       rowsByRegion[region] ||= [];
@@ -162,87 +115,181 @@ const handleFile = useCallback((file: File) => {
       if (rows.length) {
         ws.addRow(Object.keys(rows[0]));
         rows.forEach(r => ws.addRow(Object.values(r)));
+        ws.getRow(1).font = { bold: true };
       }
     });
 
     const wsSynth = wb.addWorksheet("Synthese");
-    wsSynth.addRow(["Region", "Vente"]);
+    wsSynth.addRow(["Région", "Total Ventes"]);
     ventesRegion.forEach(r => wsSynth.addRow([r.Region, r.Vente]));
+    wsSynth.getRow(1).font = { bold: true };
 
     const buf = await wb.xlsx.writeBuffer();
-    saveAs(new Blob([buf]), "ubipharm_par_region.xlsx");
+    saveAs(new Blob([buf]), `Ubipharm_Export_${new Date().toISOString().split('T')[0]}.xlsx`);
   };
 
-  /* ---------------------------------------
-     🧩 UI
-  ----------------------------------------*/
   return (
-    <div className="space-y-6">
+    <div className="flex h-screen flex-col bg-slate-50 overflow-hidden">
+     
+      
+      <main className="flex-1 overflow-y-auto p-8">
+        {/* Header */}
+        <div className="max-w-7xl mx-auto mb-8 flex flex-col md:flex-row justify-between items-start md:items-center gap-4">
+          <div>
+            <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">
+              Extraction Ubipharm
+            </h1>
+            <p className="text-slate-500 mt-1">Convertissez vos relevés .txt en fichiers Excel structurés.</p>
+          </div>
+          {ventesDF.length > 0 && (
+            <button
+              onClick={handleExportFiltered}
+              className="flex items-center gap-2 bg-green-600 hover:bg-green-700 text-white px-5 py-2.5 rounded-lg font-medium transition-all shadow-lg shadow-green-200"
+            >
+              <Download size={18} />
+              Exporter Excel (.xlsx)
+            </button>
+          )}
+        </div>
 
-      {/* Zone Drag & Drop */}
-      <div
-        onDragOver={e => { e.preventDefault(); setDragActive(true); }}
-        onDragLeave={() => setDragActive(false)}
-        onDrop={handleDrop}
-        className={`border-2 border-dashed rounded-lg p-8 text-center transition
-          ${dragActive ? "border-blue-600 bg-blue-50" : "border-gray-300"}`}
-      >
-        <p className="font-semibold">Glisser-déposer le fichier Ubipharm (.txt)</p>
-        <p className="text-sm text-gray-500 mt-1">ou utiliser le bouton ci-dessous</p>
-        <input type="file" accept=".txt" onChange={handleUpload} className="mt-4" />
-      </div>
-
-      {ventesDF.length > 0 && (
-        
-        <>
-         {/* HEADER ACCORDÉON */}
-    <button
-      onClick={() => toggleAccordion("colonnes")}
-      className="w-full px-4 py-2 bg-gray-100 font-semibold text-left"
-    >
-      📊 Colonnes à exporter
-      <span className="float-right">
-        {accordionOpen.colonnes ? "▲" : "▼"}
-      </span>
-    </button>
-
-    {/* CONTENU ACCORDÉON */}
-    {accordionOpen.colonnes && (
-      <div className="p-4 grid grid-cols-2 md:grid-cols-3 gap-2 max-h-64 overflow-y-auto">
-        {columnsAll.map(col => (
-          <label key={col} className="flex items-center gap-2 text-sm">
-            <input
-              type="checkbox"
-              checked={columnsSelected.includes(col)}
-              onChange={() => handleToggleColumn(col)}
-            />
-            {col}
-          </label>
-        ))}
-      </div>
-    )}
-       
-
-          <DataTable data={ventesDF.map(r => {
-            const o:any = {};
-            columnsSelected.forEach(c => o[c] = r[c]);
-            return o;
-          })} 
-          />
-   <button
-            onClick={handleExportFiltered}
-            className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700"
+        <div className="max-w-7xl mx-auto space-y-6">
+          
+          {/* Zone d'Upload Style Camed */}
+          <div 
+            onDragOver={e => { e.preventDefault(); setDragActive(true); }}
+            onDragLeave={() => setDragActive(false)}
+            onDrop={(e) => {
+                e.preventDefault();
+                setDragActive(false);
+                const file = e.dataTransfer.files?.[0];
+                if (file) handleFile(file);
+            }}
+            className={`relative group border-2 border-dashed rounded-xl p-10 text-center transition-all duration-300 bg-white
+              ${dragActive ? "border-indigo-500 bg-indigo-50 shadow-inner" : "border-slate-300 hover:border-slate-400"}`}
           >
-            ⬇️ Télécharger Excel (par région)
-          </button>
-       
-        </>
-      )}
+            <input type="file" accept=".txt" onChange={handleUpload} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
+            <div className="flex flex-col items-center">
+              <div className="p-4 bg-indigo-50 rounded-full mb-4 group-hover:scale-110 transition-transform duration-300">
+                <UploadCloud size={32} className="text-indigo-600" />
+              </div>
+              <p className="text-lg font-semibold text-slate-700">
+                {fileName ? fileName : "Déposez votre fichier Ubipharm (.txt)"}
+              </p>
+              <p className="text-sm text-slate-500 mt-1">Analyse automatique des régions et des stocks</p>
+            </div>
+          </div>
+
+          {ventesDF.length > 0 && (
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+              
+              {/* Accordéon Colonnes */}
+              <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden h-fit">
+                <button 
+                  onClick={() => toggleAccordion("colonnes")} 
+                  className="w-full flex items-center justify-between p-4 hover:bg-slate-50 transition-colors font-semibold text-slate-700"
+                >
+                  <div className="flex items-center gap-2">
+                    <Layers size={18} className="text-indigo-500" /> 
+                    Colonnes à exporter
+                  </div>
+                  {accordionOpen.colonnes ? <ChevronUp size={18}/> : <ChevronDown size={18}/>}
+                </button>
+                {accordionOpen.colonnes && (
+                  <div className="p-4 border-t bg-slate-50/50 grid grid-cols-2 gap-2 max-h-64 overflow-y-auto">
+                    {columnsAll.map(col => (
+                      <label key={col} className="flex items-center gap-2 text-xs font-medium text-slate-600 hover:text-indigo-600 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={columnsSelected.includes(col)}
+                          onChange={() => {
+                            setColumnsSelected(prev =>
+                                prev.includes(col) ? prev.filter(c => c !== col) : [...prev, col]
+                            );
+                          }}
+                          className="rounded text-indigo-600"
+                        />
+                        {col}
+                      </label>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              {/* Accordéon Produits/Exclusions */}
+              <div className="bg-white rounded-xl shadow-sm border border-slate-200 overflow-hidden h-fit lg:col-span-2">
+                <button 
+                  onClick={() => toggleAccordion("produits")} 
+                  className="w-full flex items-center justify-between p-4 hover:bg-slate-50 transition-colors font-semibold text-slate-700"
+                >
+                  <div className="flex items-center gap-2">
+                    <Trash2 size={18} className="text-red-500" /> 
+                    Gérer les Exclusions ({exclusions.length})
+                  </div>
+                  {accordionOpen.produits ? <ChevronUp size={18}/> : <ChevronDown size={18}/>}
+                </button>
+                {accordionOpen.produits && (
+                  <div className="p-4 border-t bg-slate-50/50">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-2 max-h-64 overflow-y-auto pr-2">
+                      {produits.map(prod => (
+                        <label key={prod} className="flex items-center gap-2 text-xs text-slate-600 py-1 border-b border-slate-100 last:border-0 truncate">
+                          <input
+                            type="checkbox"
+                            checked={exclusions.includes(prod)}
+                            onChange={() => {
+                                setExclusions(prev =>
+                                    prev.includes(prod) ? prev.filter(p => p !== prod) : [...prev, prod]
+                                );
+                            }}
+                            className="rounded text-red-500"
+                          />
+                          <span className="truncate">{prod}</span>
+                        </label>
+                      ))}
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Tableau des données style Camed */}
+          {ventesDF.length > 0 && (
+            <div className="bg-white rounded-xl shadow-lg border border-slate-200 overflow-hidden">
+              <div className="p-4 bg-slate-50 border-b flex justify-between items-center">
+                <h3 className="flex items-center gap-2 font-bold text-slate-800 uppercase tracking-wider text-sm">
+                  <TableIcon size={18} className="text-indigo-600"/> 
+                  Aperçu des données Ubipharm
+                </h3>
+                <span className="text-xs font-bold px-3 py-1 rounded-full bg-indigo-100 text-indigo-700">
+                  {ventesDF.length} lignes extraites
+                </span>
+              </div>
+              
+              <div className="overflow-x-auto">
+                {/* On passe les données filtrées à DataTable */}
+                <DataTable data={ventesDF.map(r => {
+                  const o:any = {};
+                  columnsSelected.forEach(c => o[c] = r[c]);
+                  return o;
+                })} />
+              </div>
+            </div>
+          )}
+
+          {/* Message si vide */}
+          {ventesDF.length === 0 && !fileName && (
+            <div className="flex flex-col items-center justify-center py-20 text-slate-400">
+              <FileText size={48} className="mb-4 opacity-20" />
+              <p className="italic">Aucune donnée chargée. Veuillez importer un fichier .txt</p>
+            </div>
+          )}
+        </div>
+      </main>
     </div>
   );
 }
 
-/* ---------------- Helpers ---------------- */
+/* ---------------- Helpers & Parsing (Inchangés mais conservés pour fonctionnement) ---------------- */
 
 const MONTH_RE = /^\d{2}\/\d{2}$/;
 
@@ -264,28 +311,19 @@ function sanitizeSheetName(name: string) {
   return name.replace(/[\\/*?:[\]]/g, "").slice(0, 31) || "Region";
 }
 
-function parseUbipharmTxt(
-  txt: string,
-  headers: string[]
-): {
-  rows: Record<string, any>[];
-  regionAgg: Record<string, number>;
-} {
+function parseUbipharmTxt(txt: string, headers: string[]) {
   const lines = txt.split(/\r?\n/);
-
   let currentRegion: string | null = null;
   const rows: Record<string, any>[] = [];
   const regionAgg: Record<string, number> = {};
 
   for (const line of lines) {
-    // 🔹 Détection région
     const regionMatch = line.match(/Pays.*R.gion\s+\d+\/\w+\s+(.*)/i);
     if (regionMatch) {
       currentRegion = regionMatch[1].trim();
       continue;
     }
 
-    // 🔹 Ligne produit
     const productMatch = line.match(
       /^\s*([A-Z0-9\-]+)\s+(.+?)\s+(\d+)?\s*\/\s*(\d+)\s+(\d*)\s+(\d*)\s+(\d*)\s+(\d*)\s+(\d*)\s+(\d*)\s+(\d*)/
     );
@@ -321,7 +359,5 @@ function parseUbipharmTxt(
 
     rows.push(row);
   }
-
   return { rows, regionAgg };
 }
-

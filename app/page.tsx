@@ -33,13 +33,26 @@ export default function Home() {
         </Link>
 
 
-   <Link href="/analyse" className="block max-w-sm mx-auto">
+           <Link href="/camed" className="block max-w-sm mx-auto">
           <div className="bg-white shadow p-6 rounded-lg hover:bg-blue-50 transition">
-            <h3 className="text-lg font-bold mb-2">📊 Analysez vos données </h3>
-            <p className="text-gray-600 mb-6">Analyse des ventes Laborex.</p>
+            <h3 className="text-lg font-bold mb-2">💰 Extraction Camed</h3>
+            <p className="text-gray-600 mb-6">Analyse des ventes Camed.</p>
             
           </div>
         </Link>
+
+
+   <Link href="/analyse" className="block max-w-sm mx-auto">
+          <div className="bg-white shadow p-6 rounded-lg hover:bg-blue-50 transition">
+            <h3 className="text-lg font-bold mb-2">📊 Analysez vos données </h3>
+         
+            
+          </div>
+        </Link>
+
+
+
+
 
       </div>
     </section>

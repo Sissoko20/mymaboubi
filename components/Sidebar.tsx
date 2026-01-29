@@ -9,6 +9,7 @@ const navItems = [
   { label: "🏠 Tableau de bord", href: "/" },
   { label: "📦 Extraction Ubipharm", href: "/ubipharm" },
   { label: "🧾 Extraction Laborex", href: "/laborex" },
+   { label: "🧾 Extraction Camed", href: "/camed" },
   { label: "📊 Analyse ECLA", href: "/analyse" },
 ];
 

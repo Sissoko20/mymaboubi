@@ -8,6 +8,8 @@ export interface SalesEntry {
   camed: number;
   totalUnits: number;
   totalValue: number;
+  ventes: number;
+  ca: number;
 }
 
 export interface ZoneSummary {
