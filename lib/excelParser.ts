@@ -155,6 +155,8 @@ export async function parseExcelFile(file: File): Promise<SalesEntry[]> {
               camed,
               totalUnits,
               totalValue: Math.round(totalValue * 100) / 100,
+              ventes: 0,
+              ca: 0
             });
           }
         });
