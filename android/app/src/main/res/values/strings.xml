@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">mymaboubi</string>
+    <string name="title_activity_main">mymaboubi</string>
+    <string name="package_name">com.mymaboubi.app</string>
+    <string name="custom_url_scheme">com.mymaboubi.app</string>
+</resources>
