@@ -2,6 +2,7 @@ import type { Metadata, Viewport } from "next"; // Ajout de Viewport
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import NativeMobileUtils from "@/components/NativeMobileUtils";
+import { AuthProvider } from "@/context/AuthContext";
 const geistSans = Geist({
   variable: "--font-geist-sans",
   subsets: ["latin"],
@@ -48,6 +49,7 @@ export default function RootLayout({
           flexDirection: "column",
         }}
       >
+        <AuthProvider>
          <NativeMobileUtils />
         {/* On peut ajouter une div de contenu qui respecte les zones de sécurité ici 
             ou le gérer directement dans globals.css */}
@@ -55,6 +57,7 @@ export default function RootLayout({
         <main className="safe-area-spacing">
           {children}
         </main>
+        </AuthProvider>
       </body>
     </html>
   );
